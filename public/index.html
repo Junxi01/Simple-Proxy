@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SimpleProxy Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>SimpleProxy</h1>
+    <span class="subtitle">Lightweight HTTP Debugging Proxy</span>
+  </header>
+
+  <main>
+    <!-- Rules Panel -->
+    <section class="panel" id="rules-panel">
+      <h2>Active Rules</h2>
+      <div id="rules-container" class="card">
+        <p class="muted">Loading rules...</p>
+      </div>
+    </section>
+
+    <!-- Logs Panel -->
+    <section class="panel" id="logs-panel">
+      <h2>Request Log <span id="log-count" class="badge">0</span></h2>
+      <div class="table-wrap">
+        <table id="log-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Method</th>
+              <th>URL</th>
+              <th>Status</th>
+              <th>Elapsed</th>
+            </tr>
+          </thead>
+          <tbody id="log-body">
+            <tr><td colspan="5" class="muted">No requests yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const LOG_POLL_INTERVAL = 2000;
+
+    // ─── Rules ──────────────────────────────────────────────────────────
+    async function loadRules() {
+      try {
+        const res = await fetch('/api/rules');
+        const rules = await res.json();
+        const container = document.getElementById('rules-container');
+
+        if (!rules.length) {
+          container.innerHTML = '<p class="muted">No rules configured.</p>';
+          return;
+        }
+
+        let html = '<ul class="rule-list">';
+        rules.forEach((r) => {
+          const parts = [];
+          if (r.modifyRequest)  parts.push('<span class="tag tag-req">Modify Request</span>');
+          if (r.modifyResponse) parts.push('<span class="tag tag-res">Modify Response</span>');
+          if (r.delay)          parts.push('<span class="tag tag-delay">Delay ' + r.delay + 'ms</span>');
+          if (r.mockFile)       parts.push('<span class="tag tag-mock">Mock: ' + escapeHtml(r.mockFile) + '</span>');
+
+          html += '<li>' +
+            '<code class="rule-match">' + escapeHtml(r.match || '') + '</code>' +
+            '<div class="tags">' + parts.join('') + '</div>' +
+            '</li>';
+        });
+        html += '</ul>';
+        container.innerHTML = html;
+      } catch (e) {
+        console.error('Failed to load rules', e);
+      }
+    }
+
+    // ─── Logs ───────────────────────────────────────────────────────────
+    async function pollLogs() {
+      try {
+        const res = await fetch('/api/logs');
+        const logs = await res.json();
+        const tbody = document.getElementById('log-body');
+        const badge = document.getElementById('log-count');
+
+        badge.textContent = logs.length;
+
+        if (!logs.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="muted">No requests yet.</td></tr>';
+          return;
+        }
+
+        let html = '';
+        logs.forEach((log) => {
+          const statusClass = statusColor(log.statusCode);
+          html += '<tr>' +
+            '<td class="cell-time">' + formatTime(log.time) + '</td>' +
+            '<td><span class="method">' + escapeHtml(log.method) + '</span></td>' +
+            '<td class="cell-url" title="' + escapeHtml(log.url) + '">' + escapeHtml(truncate(log.url, 80)) + '</td>' +
+            '<td><span class="status ' + statusClass + '">' + log.statusCode + '</span></td>' +
+            '<td>' + escapeHtml(log.elapsed) + '</td>' +
+            '</tr>';
+        });
+        tbody.innerHTML = html;
+      } catch (e) {
+        console.error('Failed to poll logs', e);
+      }
+    }
+
+    // ─── Helpers ────────────────────────────────────────────────────────
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function truncate(s, max) {
+      return s.length > max ? s.substring(0, max) + '…' : s;
+    }
+
+    function formatTime(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      return d.toLocaleTimeString();
+    }
+
+    function statusColor(code) {
+      if (code >= 500) return 'status-5xx';
+      if (code >= 400) return 'status-4xx';
+      if (code >= 300) return 'status-3xx';
+      if (code >= 200) return 'status-2xx';
+      return '';
+    }
+
+    // ─── Init ───────────────────────────────────────────────────────────
+    loadRules();
+    pollLogs();
+    setInterval(pollLogs, LOG_POLL_INTERVAL);
+  </script>
+</body>
+</html>
