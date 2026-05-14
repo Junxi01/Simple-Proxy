@@ -36,6 +36,7 @@ function sleep(ms) {
 function createProxyHandler(rules) {
   const proxy = httpProxy.createProxyServer({
     secure: false,
+    agent: false,
     selfHandleResponse: true,
   });
 
@@ -172,4 +173,4 @@ function createProxyHandler(rules) {
   return handler;
 }
 
-module.exports = { createProxyHandler, getLogs };
+module.exports = { createProxyHandler, getLogs, addLog };
